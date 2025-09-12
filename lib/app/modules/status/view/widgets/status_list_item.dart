@@ -135,16 +135,16 @@ class StatusListItem extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            fileName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          // Text(
+          //   fileName,
+          //   maxLines: 1,
+          //   overflow: TextOverflow.ellipsis,
+          //   style: const TextStyle(
+          //     color: Colors.white,
+          //     fontSize: 12,
+          //     fontWeight: FontWeight.w500,
+          //   ),
+          // ),
           const SizedBox(height: 2),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -165,12 +165,12 @@ class StatusListItem extends StatelessWidget {
                     onPressed: () => onShare(file),
                     tooltip: 'Share',
                   ),
-                  const SizedBox(width: 4),
-                  _buildIconButton(
-                    icon: Icons.download,
-                    onPressed: () => onDownload(file),
-                    tooltip: 'Download',
-                  ),
+                  // const SizedBox(width: 4),
+                  // _buildIconButton(
+                  //   icon: Icons.download,
+                  //   onPressed: () {},
+                  //   tooltip: 'Download',
+                  // ),
                 ],
               ),
             ],
