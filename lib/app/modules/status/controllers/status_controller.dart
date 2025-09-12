@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
 import 'package:permission_handler/permission_handler.dart';
-import 'package:status_mate/app/routes/app_pages.dart';
-import 'package:status_mate/core/constants/storage_keys.dart';
 import 'package:status_mate/core/errors/exceptions.dart';
 import 'package:status_mate/core/logger/app_logger.dart';
 import 'package:status_mate/core/storage/local_storage_service.dart';
@@ -154,8 +153,39 @@ class StatusController extends GetxController {
   Future<bool> _checkAndRequestPermissions() async {
     if (!Platform.isAndroid) return true;
 
-    final permissions = await PermissionUtils.requestStoragePermissions();
-    return permissions.isGranted;
+    // First check if we already have permissions
+    if (await PermissionUtils.hasRequiredPermissions()) {
+      return true;
+    }
+
+    // If not, request them
+    final granted = await PermissionUtils.requestStoragePermissions();
+    if (!granted) {
+      // If permissions are denied, show a dialog to open settings
+      errorMessage.value = 'Storage permission is required to access WhatsApp statuses';
+      await Get.dialog(
+        AlertDialog(
+          title: const Text('Permission Required'),
+          content: const Text('Storage permission is required to access WhatsApp statuses. Please enable it in app settings.'),
+          actions: [
+            TextButton(
+              onPressed: () => Get.back(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Get.back();
+                PermissionUtils.openAppSettings();
+              },
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
+      );
+      return false;
+    }
+    
+    return true;
   }
 
   bool _isImageFile(String path) {

@@ -1,28 +1,36 @@
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/services.dart';
 
 /// A utility class for handling app permissions
 class PermissionUtils {
   /// Request all necessary permissions for the app
-  static Future<PermissionStatus> requestStoragePermissions() async {
-    if (await Permission.manageExternalStorage.isRestricted) {
-      // On some devices, we can't request manage external storage
-      // Fall back to storage permission
-      return await Permission.storage.request();
+  static Future<bool> requestStoragePermissions() async {
+    try {
+      if (!await Permission.storage.isGranted) {
+        final status = await Permission.storage.request();
+        if (status != PermissionStatus.granted) {
+          return false;
+        }
+      }
+
+      // For Android 10 (API 29) and below, we need to request manage external storage
+      if (await Permission.manageExternalStorage.isRestricted) {
+        return true; // Can't request this permission, return true if storage is granted
+      }
+
+      // For Android 11 (API 30) and above, we need to request manage external storage
+      if (!await Permission.manageExternalStorage.isGranted) {
+        final status = await Permission.manageExternalStorage.request();
+        if (status != PermissionStatus.granted) {
+          return false;
+        }
+      }
+
+      return true;
+    } on PlatformException catch (e) {
+      print('Permission exception: $e');
+      return false;
     }
-
-    // Request both storage and manage external storage permissions
-    final status = await [
-      Permission.storage,
-      Permission.manageExternalStorage,
-    ].request();
-
-    // Return the most restrictive status
-    if (status[Permission.manageExternalStorage] == PermissionStatus.granted &&
-        status[Permission.storage] == PermissionStatus.granted) {
-      return PermissionStatus.granted;
-    }
-
-    return PermissionStatus.denied;
   }
 
   /// Check if all required permissions are granted
