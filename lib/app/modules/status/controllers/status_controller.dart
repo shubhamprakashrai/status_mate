@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
-import 'package:permission_handler/permission_handler.dart';
 import 'package:status_mate/core/errors/exceptions.dart';
 import 'package:status_mate/core/logger/app_logger.dart';
 import 'package:status_mate/core/storage/local_storage_service.dart';
@@ -20,15 +19,18 @@ class StatusController extends GetxController {
   final _logger = AppLogger('StatusController');
   final LocalStorageService _storage = Get.find<LocalStorageService>();
 
-  // Timer for auto-refresh
   Timer? _refreshTimer;
 
-  // Status directory path
-  static const String _statusDirPath =
+  // WhatsApp and WA Business status directories
+  static const String _waStatusPath =
       '/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/.Statuses';
+  static const String _waBusinessStatusPath =
+      '/storage/emulated/0/Android/media/com.whatsapp.w4b/WhatsApp Business/Media/.Statuses';
 
   // Saved status directory path
   static String get _savedDirPath => '/storage/emulated/0/Download/StatusMate';
+
+  String get downloadsPath => _savedDirPath;
 
   @override
   void onInit() {
@@ -44,7 +46,6 @@ class StatusController extends GetxController {
   }
 
   void _setupAutoRefresh() {
-    // Check for new statuses every 30 seconds
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!isLoading.value) {
         fetchStatuses();
@@ -57,33 +58,42 @@ class StatusController extends GetxController {
     await fetchStatuses();
   }
 
-  /// Fetches statuses from the WhatsApp status directory
+  /// Fetches statuses from WhatsApp / WhatsApp Business folders
   Future<void> fetchStatuses() async {
     try {
       isLoading.value = true;
       errorMessage.value = '';
 
-      // Check if we have necessary permissions
       if (!await _checkAndRequestPermissions()) {
         throw const PermissionDeniedException('Storage permission not granted');
       }
 
-      final dir = Directory(_statusDirPath);
-      _logger.d('Checking status directory: ${dir.path}');
+      final possiblePaths = [_waStatusPath, _waBusinessStatusPath];
+      Directory? foundDir;
 
-      if (!await dir.exists()) {
-        _logger.w('Status directory does not exist');
-        errorMessage.value = 'WhatsApp status directory not found. Make sure you have statuses saved.';
+      for (final dirPath in possiblePaths) {
+        final dir = Directory(dirPath);
+        if (await dir.exists()) {
+          foundDir = dir;
+          _logger.i('Found statuses folder: $dirPath');
+          break;
+        } else {
+          _logger.w('Directory not found: $dirPath');
+        }
+      }
+
+      if (foundDir == null) {
+        errorMessage.value =
+            'No WhatsApp statuses found. Please open WhatsApp and check a status first.';
         return;
       }
 
-      // List all files and filter by type
-      final files = await dir.list()
+      final files = await foundDir
+          .list()
           .where((entity) => entity is File)
           .cast<File>()
           .toList();
 
-      // Filter based on current filter setting
       final filteredFiles = files.where((file) {
         if (currentFilter.value == StatusType.image) {
           return _isImageFile(file.path);
@@ -93,13 +103,11 @@ class StatusController extends GetxController {
         return _isImageFile(file.path) || _isVideoFile(file.path);
       }).toList();
 
-      // Sort by last modified (newest first)
-      filteredFiles.sort((a, b) =>
-          b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+      filteredFiles.sort(
+          (a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
 
       statusList.assignAll(filteredFiles);
       _logger.i('Fetched ${filteredFiles.length} statuses');
-
     } catch (e, stackTrace) {
       _logger.e('Error fetching statuses', e, stackTrace);
       errorMessage.value = e.toString();
@@ -111,6 +119,11 @@ class StatusController extends GetxController {
 
   /// Downloads a status file to the downloads directory
   Future<void> downloadStatus(File file) async {
+    final stopwatch = Stopwatch()..start();
+    final fileSize = await file.length();
+    _logger.d(
+        'Starting download of file: ${file.path} (${fileSize / 1024} KB)');
+
     try {
       if (!await _checkAndRequestPermissions()) {
         throw const PermissionDeniedException('Storage permission not granted');
@@ -121,71 +134,98 @@ class StatusController extends GetxController {
         await savedDir.create(recursive: true);
       }
 
+      // Generate a unique filename
       final fileName = _generateUniqueFileName(file.path);
       final newFilePath = path.join(_savedDirPath, fileName);
 
       _logger.d('Saving file to: $newFilePath');
 
-      // Check if file already exists
-      final existingFile = File(newFilePath);
-      if (await existingFile.exists()) {
-        throw FileExistsException('File already exists');
+      // Copy file safely
+      final savedFile = await file.copy(newFilePath);
+
+      // Verify integrity
+      final savedFileSize = await savedFile.length();
+      if (savedFileSize != fileSize) {
+        _logger.e(
+            'File size mismatch: expected $fileSize bytes, got $savedFileSize bytes');
+        await savedFile.delete();
+        throw Exception('File copy failed: size mismatch');
       }
 
-      // Copy the file
-      await file.copy(newFilePath);
+      _logger.i(
+          'File saved successfully: $newFilePath (${savedFileSize / 1024} KB in ${stopwatch.elapsedMilliseconds}ms)');
 
-      // Update media store for gallery visibility
-      // await _updateMediaStore(newFilePath);
-
-      _logger.i('File saved successfully: $newFilePath');
-
-      // Track download in analytics if needed
-      // _trackDownload(file);
-
+      // Optional: Update MediaStore so file appears in Gallery
+      try {
+        await Process.run('am', ['broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', 'file://$newFilePath']);
+        _logger.i('MediaScanner updated for: $newFilePath');
+      } catch (e) {
+        _logger.w('MediaScanner update failed: $e');
+      }
     } catch (e, stackTrace) {
       _logger.e('Error saving file', e, stackTrace);
       rethrow;
+    } finally {
+      stopwatch.stop();
     }
   }
 
-  // Helper methods
+  // Helpers
   Future<bool> _checkAndRequestPermissions() async {
-    if (!Platform.isAndroid) return true;
+    bool hasPermissions = await PermissionUtils.hasRequiredPermissions();
 
-    // First check if we already have permissions
-    if (await PermissionUtils.hasRequiredPermissions()) {
-      return true;
+    while (!hasPermissions) {
+      final status = await PermissionUtils.requestStoragePermissions();
+
+      if (!status) {
+        errorMessage.value =
+            'Storage permission is required to access WhatsApp statuses';
+        final shouldOpenSettings = await showPermissionRequiredDialog();
+
+        if (shouldOpenSettings) {
+          try {
+            await PermissionUtils.openAppSettings();
+            await Future.delayed(const Duration(seconds: 1));
+          } catch (e) {
+            _logger.e('Error opening app settings', e);
+            await Get.snackbar(
+              'Error',
+              'Could not open settings. Please enable permissions manually.',
+              snackPosition: SnackPosition.BOTTOM,
+            );
+          }
+        } else {
+          continue;
+        }
+      }
+      hasPermissions = await PermissionUtils.hasRequiredPermissions();
     }
 
-    // If not, request them
-    final granted = await PermissionUtils.requestStoragePermissions();
-    if (!granted) {
-      // If permissions are denied, show a dialog to open settings
-      errorMessage.value = 'Storage permission is required to access WhatsApp statuses';
-      await Get.dialog(
-        AlertDialog(
-          title: const Text('Permission Required'),
-          content: const Text('Storage permission is required to access WhatsApp statuses. Please enable it in app settings.'),
-          actions: [
-            TextButton(
-              onPressed: () => Get.back(),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                Get.back();
-                PermissionUtils.openAppSettings();
-              },
-              child: const Text('Open Settings'),
-            ),
-          ],
-        ),
-      );
-      return false;
-    }
-    
     return true;
+  }
+
+  Future<bool> showPermissionRequiredDialog() async {
+    return await Get.dialog<bool>(
+          AlertDialog(
+            title: const Text('Permission Required'),
+            content: const Text(
+              'Storage permission is required to access WhatsApp statuses. '
+              'Please grant the permission to continue.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Get.back(result: false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Get.back(result: true),
+                child: const Text('Open Settings'),
+              ),
+            ],
+          ),
+          barrierDismissible: false,
+        ) ??
+        false;
   }
 
   bool _isImageFile(String path) {
@@ -199,16 +239,10 @@ class StatusController extends GetxController {
   }
 
   String _generateUniqueFileName(String originalPath) {
-    final fileName = path.basename(originalPath);
-    final timestamp = DateTime
-        .now()
-        .millisecondsSinceEpoch;
+    final fileName = path.basenameWithoutExtension(originalPath);
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final random = DateTime.now().microsecond;
     final ext = path.extension(originalPath).toLowerCase();
-    return ext;
+    return '${fileName}_${timestamp}_$random$ext';
   }
-
-
 }
-
-
-
