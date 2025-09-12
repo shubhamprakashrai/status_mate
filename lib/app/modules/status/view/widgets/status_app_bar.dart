@@ -56,7 +56,7 @@ class StatusAppBar extends StatelessWidget implements PreferredSizeWidget {
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white70,
               tabs: const [
-                Tab(text: 'Images'),
+                Tab(text: 'Recent'),
                 Tab(text: 'Video'),
                 Tab(text: 'All'),
               ],
