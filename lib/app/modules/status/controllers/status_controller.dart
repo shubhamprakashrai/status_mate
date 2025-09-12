@@ -1,107 +1,181 @@
+import 'dart:async';
 import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:path/path.dart' as path;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:status_mate/app/routes/app_pages.dart';
+import 'package:status_mate/core/constants/storage_keys.dart';
+import 'package:status_mate/core/errors/exceptions.dart';
+import 'package:status_mate/core/logger/app_logger.dart';
+import 'package:status_mate/core/storage/local_storage_service.dart';
+import 'package:status_mate/core/utils/permission_utils.dart';
 
+/// Status types for filtering
+enum StatusType { image, video, all }
 
 class StatusController extends GetxController {
-  var statusList = <File>[].obs;
+  final RxList<File> statusList = <File>[].obs;
+  final RxBool isLoading = false.obs;
+  final RxString errorMessage = ''.obs;
+  final Rx<StatusType> currentFilter = StatusType.all.obs;
+  final _logger = AppLogger('StatusController');
+  final LocalStorageService _storage = Get.find<LocalStorageService>();
+
+  // Timer for auto-refresh
+  Timer? _refreshTimer;
+
+  // Status directory path
+  static const String _statusDirPath =
+      '/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/.Statuses';
+
+  // Saved status directory path
+  static String get _savedDirPath => '/storage/emulated/0/Download/StatusMate';
 
   @override
   void onInit() {
     super.onInit();
-    fetchStatuses();
+    _setupAutoRefresh();
+    _loadInitialData();
   }
 
-  Future<void> fetchStatuses() async {
-    if (Platform.isAndroid) {
-      final manageStatus = await Permission.manageExternalStorage.status;
-      final readStatus = await Permission.storage.status;
+  @override
+  void onClose() {
+    _refreshTimer?.cancel();
+    super.onClose();
+  }
 
-      if (!manageStatus.isGranted || !readStatus.isGranted) {
-        final result = await [
-          Permission.manageExternalStorage,
-          Permission.storage,
-        ].request();
-
-        if (!result[Permission.manageExternalStorage]!.isGranted) {
-          Get.snackbar('Permission Needed', 'Grant storage permission from settings');
-          await openAppSettings();
-          return;
-        }
+  void _setupAutoRefresh() {
+    // Check for new statuses every 30 seconds
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!isLoading.value) {
+        fetchStatuses();
       }
-    }
+    });
+  }
 
-    final dirPath = '/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/.Statuses';
-    final dir = Directory(dirPath);
+  Future<void> _loadInitialData() async {
+    await _checkAndRequestPermissions();
+    await fetchStatuses();
+  }
 
-    print("Checking path: $dirPath");
+  /// Fetches statuses from the WhatsApp status directory
+  Future<void> fetchStatuses() async {
+    try {
+      isLoading.value = true;
+      errorMessage.value = '';
 
-    if (await dir.exists()) {
-      final files = dir.listSync().whereType<File>().toList();
-      final filtered = files.where((f) =>
-          f.path.endsWith('.jpg') || f.path.endsWith('.mp4')).toList();
-      statusList.assignAll(filtered);
-      print("Statuses found: ${filtered.length}");
-    } else {
-      print("Directory doesn't exist");
-    }
+      // Check if we have necessary permissions
+      if (!await _checkAndRequestPermissions()) {
+        throw const PermissionDeniedException('Storage permission not granted');
+      }
 
-    if (statusList.isEmpty) {
-      print("No statuses found.");
+      final dir = Directory(_statusDirPath);
+      _logger.d('Checking status directory: ${dir.path}');
+
+      if (!await dir.exists()) {
+        _logger.w('Status directory does not exist');
+        errorMessage.value = 'WhatsApp status directory not found. Make sure you have statuses saved.';
+        return;
+      }
+
+      // List all files and filter by type
+      final files = await dir.list()
+          .where((entity) => entity is File)
+          .cast<File>()
+          .toList();
+
+      // Filter based on current filter setting
+      final filteredFiles = files.where((file) {
+        if (currentFilter.value == StatusType.image) {
+          return _isImageFile(file.path);
+        } else if (currentFilter.value == StatusType.video) {
+          return _isVideoFile(file.path);
+        }
+        return _isImageFile(file.path) || _isVideoFile(file.path);
+      }).toList();
+
+      // Sort by last modified (newest first)
+      filteredFiles.sort((a, b) =>
+          b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+
+      statusList.assignAll(filteredFiles);
+      _logger.i('Fetched ${filteredFiles.length} statuses');
+
+    } catch (e, stackTrace) {
+      _logger.e('Error fetching statuses', e, stackTrace);
+      errorMessage.value = e.toString();
+      rethrow;
+    } finally {
+      isLoading.value = false;
     }
   }
 
+  /// Downloads a status file to the downloads directory
+  Future<void> downloadStatus(File file) async {
+    try {
+      if (!await _checkAndRequestPermissions()) {
+        throw const PermissionDeniedException('Storage permission not granted');
+      }
 
+      final savedDir = Directory(_savedDirPath);
+      if (!await savedDir.exists()) {
+        await savedDir.create(recursive: true);
+      }
 
-  
+      final fileName = _generateUniqueFileName(file.path);
+      final newFilePath = path.join(_savedDirPath, fileName);
 
+      _logger.d('Saving file to: $newFilePath');
 
-Future<void> downloadStatus(File file) async {
-  final savedDirPath = '/storage/emulated/0/Download/StatusMate';
-  final savedDir = Directory(savedDirPath);
+      // Check if file already exists
+      final existingFile = File(newFilePath);
+      if (await existingFile.exists()) {
+        throw FileExistsException('File already exists');
+      }
 
-  if (!await savedDir.exists()) {
-    await savedDir.create(recursive: true);
+      // Copy the file
+      await file.copy(newFilePath);
+
+      // Update media store for gallery visibility
+      // await _updateMediaStore(newFilePath);
+
+      _logger.i('File saved successfully: $newFilePath');
+
+      // Track download in analytics if needed
+      // _trackDownload(file);
+
+    } catch (e, stackTrace) {
+      _logger.e('Error saving file', e, stackTrace);
+      rethrow;
+    }
   }
 
-  final newFilePath = path.join(savedDirPath, path.basename(file.path));
-  final newFile = File(newFilePath);
+  // Helper methods
+  Future<bool> _checkAndRequestPermissions() async {
+    if (!Platform.isAndroid) return true;
 
-  try {
-    await file.copy(newFilePath);
-
-    Get.snackbar(
-      "Saved Successfully ✅",
-      "File saved to:\n$newFilePath",
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: Colors.green.shade600,
-      colorText: Colors.white,
-      margin: const EdgeInsets.all(12),
-      borderRadius: 10,
-      duration: const Duration(seconds: 4),
-      icon: const Icon(Icons.check_circle, color: Colors.white),
-    );
-  } catch (e) {
-    Get.snackbar(
-      "Save Failed ❌",
-      e.toString(),
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: Colors.red.shade600,
-      colorText: Colors.white,
-      margin: const EdgeInsets.all(12),
-      borderRadius: 10,
-      duration: const Duration(seconds: 4),
-      icon: const Icon(Icons.error, color: Colors.white),
-    );
+    final permissions = await PermissionUtils.requestStoragePermissions();
+    return permissions.isGranted;
   }
-}
 
+  bool _isImageFile(String path) {
+    final ext = path.toLowerCase().split('.').last;
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
+  }
 
+  bool _isVideoFile(String path) {
+    final ext = path.toLowerCase().split('.').last;
+    return ['mp4', 'mov', 'avi', 'mkv', '3gp'].contains(ext);
+  }
 
-
-
+  String _generateUniqueFileName(String originalPath) {
+    final fileName = path.basename(originalPath);
+    final timestamp = DateTime
+        .now()
+        .millisecondsSinceEpoch;
+    final ext = path.extension(originalPath).toLowerCase();
+    return ext;
+  }
 
 
 }
