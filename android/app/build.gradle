@@ -27,13 +27,13 @@ def keystorePropertiesFile = rootProject.file('key.properties')
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 } else {
-    // Create default debug keystore properties if key.properties doesn't exist
+    // Use the keystore in the home directory for release builds
     def userHome = System.getProperty('user.home')
     keystoreProperties = [
-        keyAlias: 'androiddebugkey',
-        keyPassword: 'android',
-        storeFile: "${userHome}/.android/debug.keystore",
-        storePassword: 'android'
+        keyAlias: 'statusmate',
+        keyPassword: 'StatusMate@123d',  // Replace with your actual key password
+        storeFile: file("${userHome}/status_mate.jks"),
+        storePassword: 'StatusMate@123d'  // Replace with your actual keystore password
     ]
 }
 
@@ -71,17 +71,10 @@ android {
 
     signingConfigs {
         release {
-            if (keystoreProperties instanceof Map) {
-                keyAlias keystoreProperties.keyAlias
-                keyPassword keystoreProperties.keyPassword
-                storeFile file(keystoreProperties.storeFile)
-                storePassword keystoreProperties.storePassword
-            } else {
-                keyAlias keystoreProperties['keyAlias']
-                keyPassword keystoreProperties['keyPassword']
-                storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
-                storePassword keystoreProperties['storePassword']
-            }
+            keyAlias 'statusmate'
+            keyPassword 'StatusMate@123d'
+            storeFile file("${System.getProperty('user.home')}/status_mate.jks")
+            storePassword 'StatusMate@123d'
         }
     }
 
