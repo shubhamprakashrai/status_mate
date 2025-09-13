@@ -69,15 +69,12 @@ android {
         }
     }
 
-    def keystoreFile = System.getenv('KEYSTORE_FILE') ?: "${rootProject.projectDir}/app/keystore.jks"
-    def keystoreConfig = new Properties()
-    
     signingConfigs {
         release {
-            keyAlias System.getenv('KEY_ALIAS') ?: 'upload'
-            keyPassword System.getenv('KEY_PASSWORD') ?: 'password'
-            storeFile file(keystoreFile)
-            storePassword System.getenv('STORE_PASSWORD') ?: 'password'
+            keyAlias 'upload'
+            keyPassword 'password'
+            storeFile file("${rootProject.projectDir}/app/upload-keystore.jks")
+            storePassword 'password'
         }
     }
 
