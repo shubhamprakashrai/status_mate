@@ -24,8 +24,8 @@ class StatusItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final isVideo = file.path.toLowerCase().endsWith('.mp4');
     final fileName = path.basename(file.path);
-    final fileSize = _formatFileSize(file.lengthSync());
-    final lastModified = _formatDate(File(file.path).lastModifiedSync());
+    // final fileSize = _formatFileSize(file.lengthSync());
+    // final lastModified = _formatDate(File(file.path).lastModifiedSync());
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -96,19 +96,19 @@ class StatusItem extends StatelessWidget {
               overflowSpacing: 12,
               children: [
                 InkWell(
+                  onTap: onSave,
                   child: Padding(
                     padding: const EdgeInsets.all(12.0),
                     child: const Icon(Icons.save_alt, size: 20),
                   ),
-                  onTap: onSave,
                 ),
 
                 InkWell(
+                  onTap: onShare,
                   child: Padding(
                     padding: const EdgeInsets.all(12.0),
                     child: const Icon(Icons.share, size: 20),
                   ),
-                  onTap: onShare,
                 ),
 
                 // const SizedBox(width: 8),

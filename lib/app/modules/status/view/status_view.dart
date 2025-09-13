@@ -32,7 +32,7 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this); // Changed length to 3 for All, Images, Videos
     _tabController.addListener(_handleTabChange);
     _checkPermissions();
   }
