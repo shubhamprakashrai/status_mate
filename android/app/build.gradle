@@ -69,12 +69,16 @@ android {
         }
     }
 
+    def keystoreConfigFile = rootProject.file("key.properties")
+    def keystoreConfig = new Properties()
+    keystoreConfig.load(new FileInputStream(keystoreConfigFile))
+
     signingConfigs {
         release {
-            keyAlias 'upload'
-            keyPassword 'password'
-            storeFile file("${rootProject.projectDir}/app/upload-keystore.jks")
-            storePassword 'password'
+            keyAlias keystoreConfig['keyAlias']
+            keyPassword keystoreConfig['keyPassword']
+            storeFile file(keystoreConfig['storeFile'])
+            storePassword keystoreConfig['storePassword']
         }
     }
 
