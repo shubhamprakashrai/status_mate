@@ -110,7 +110,7 @@ android {
             }
         }
     }
-    
+
     packagingOptions {
         exclude '**/x86/**'
         exclude '**/x86_64/**'

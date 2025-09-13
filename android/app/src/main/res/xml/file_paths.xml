@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- For accessing files in the app's external files directory -->
+    <external-path
+        name="external_files"
+        path="." />
+    
+    <!-- For accessing files in the app's cache directory -->
+    <cache-path
+        name="cache"
+        path="/" />
+        
+    <!-- For accessing files in the app's external cache directory -->
+    <external-cache-path
+        name="external_cache"
+        path="/" />
+        
+    <!-- For accessing files in the app's files directory -->
+    <files-path
+        name="files"
+        path="/" />
+</paths>
