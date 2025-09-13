@@ -1,13 +1,10 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
 import 'package:permission_handler/permission_handler.dart' as perm;
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:status_mate/core/logger/app_logger.dart';
-import 'package:status_mate/core/storage/local_storage_service.dart';
-import 'package:status_mate/core/utils/permission_utils.dart';
 import 'package:status_mate/core/utils/whatsapp_status_utils.dart';
 import 'package:status_mate/core/constants/app_strings.dart';
 
@@ -36,17 +33,10 @@ class StatusController extends GetxController {
   final RxString errorMessage = ''.obs;
   final Rx<StatusType> currentFilter = StatusType.all.obs;
   final _logger = AppLogger('StatusController');
-  final LocalStorageService _storage = Get.find<LocalStorageService>();
+  // LocalStorageService will be used in future implementations
+  // final LocalStorageService _storage = Get.find<LocalStorageService>();
 
   Timer? _refreshTimer;
-
-  String? _statusDirPath;
-  // List of possible WhatsApp status directories
-  static const List<String> _possibleStatusPaths = [
-    '/sdcard/WhatsApp/Media/.Statuses',
-    '/storage/emulated/0/WhatsApp/Media/.Statuses',
-    '/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/.Statuses',
-  ];
 
   // Saved status directory path
   static String get _savedDirPath => '/storage/emulated/0/Download/StatusMate';
@@ -115,19 +105,6 @@ class StatusController extends GetxController {
     }
   }
 
-  // Find the correct status directory
-  Future<void> _findStatusDirectory() async {
-    for (final path in _possibleStatusPaths) {
-      final dir = Directory(path);
-      if (await dir.exists()) {
-        _statusDirPath = path;
-        _logger.i('Found status directory at: $path');
-        return;
-      }
-    }
-    _logger.e('Could not find WhatsApp status directory');
-    errorMessage.value = 'Could not find WhatsApp status directory. Please ensure WhatsApp is installed.';
-  }
 
   // Check and request necessary permissions
   Future<bool> _checkAndRequestPermissions() async {
@@ -184,29 +161,8 @@ class StatusController extends GetxController {
     super.onClose();
   }
 
-  Future<void> _loadInitialData() async {
-    try {
-      if (_statusDirPath == null) {
-        await _findStatusDirectory();
-        if (_statusDirPath == null) {
-          throw Exception('Status directory not found');
-        }
-      }
-
-      isLoading.value = true;
-      errorMessage.value = '';
-      await _loadStatuses();
-    } catch (e) {
-      _logger.e('Error loading initial data: $e');
-      if (e is PermissionDeniedException) {
-        errorMessage.value = 'Permission denied. Please grant storage permission to continue.';
-      } else {
-        errorMessage.value = 'Failed to load statuses: ${e.toString()}';
-      }
-    } finally {
-      isLoading.value = false;
-    }
-  }
+  // Removed _loadInitialData as it's not currently used
+  // Will be implemented in a future update with proper error handling
 
   /// Fetches statuses from the WhatsApp status directory
   Future<void> _loadStatuses() async {
@@ -226,8 +182,28 @@ class StatusController extends GetxController {
       // Clear existing statuses
       statusList.clear();
 
-      // Get status files using the best available method
-      final files = await WhatsAppStatusUtils.getStatusFiles();
+          // First try the standard method
+      List<File> files = [];
+      
+      // Try direct access first
+      if (await WhatsAppStatusUtils.hasStoragePermission()) {
+        try {
+          files = await WhatsAppStatusUtils.getStatusFiles(forceSAF: false);
+          _logger.i('Found ${files.length} status files using direct access');
+        } catch (e) {
+          _logger.e('Error getting status files with direct access: $e');
+        }
+      }
+      
+      // If no files found, try using SAF (Storage Access Framework)
+      if (files.isEmpty) {
+        try {
+          files = await WhatsAppStatusUtils.getStatusFiles(forceSAF: true);
+          _logger.i('Found ${files.length} status files using SAF');
+        } catch (e) {
+          _logger.e('Error getting status files with SAF: $e');
+        }
+      }
 
       if (files.isNotEmpty) {
         statusList.addAll(files);
