@@ -221,9 +221,9 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
     return TabBar(
       controller: _tabController,
       tabs: const [
+        Tab(text: 'Image'),
+        Tab(text: 'Video'),
         Tab(text: 'All'),
-        Tab(text: 'Images'),
-        Tab(text: 'Videos'),
       ],
       onTap: (index) {
         setState(() {
