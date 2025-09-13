@@ -6,6 +6,8 @@ import 'package:shimmer/shimmer.dart';
 import 'package:status_mate/app/modules/status/view/image_preview.dart';
 import 'package:status_mate/app/modules/status/view/video_preview_page.dart';
 import 'package:status_mate/app/theme/app_theme.dart';
+import 'package:status_mate/core/constants/app_strings.dart';
+import 'package:status_mate/core/utils/permission_utils.dart';
 import 'package:path/path.dart' as path;
 import 'package:intl/intl.dart';
 import '../controllers/status_controller.dart';
@@ -32,6 +34,61 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
+    _checkPermissions();
+    
+    // Listen to permission error changes
+    ever(controller.permissionError, (error) {
+      if (error.isNotEmpty) {
+        _showPermissionDialog();
+      }
+    });
+  }
+
+  Future<void> _refreshStatuses() async {
+    // Reset search when refreshing
+    _searchController.clear();
+    _isSearching = false;
+    // Force refresh to ensure we get the latest statuses
+    await controller.loadStatuses(forceRefresh: true);
+  }
+
+  Future<void> _checkPermissions() async {
+    final hasPermission = await controller.checkAndRequestPermissions();
+    if (!hasPermission) {
+      final shouldOpenSettings = await _showPermissionDialog();
+      if (shouldOpenSettings) {
+        await PermissionUtils.openAppSettingsPage();
+      }
+    } else {
+      // Refresh statuses if we have permissions
+      await controller.loadStatuses();
+    }
+  }
+
+  Future<bool> _showPermissionDialog() async {
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) => AlertDialog(
+        title: const Text('Permission Required'),
+        content: const Text(
+          'Storage permission is required to access WhatsApp statuses.\n\nPlease grant the permission in app settings or use the file picker to select the WhatsApp status folder.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('CANCEL'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(true);
+              PermissionUtils.openAppSettingsPage();
+            },
+            child: const Text('OPEN SETTINGS'),
+          ),
+        ],
+      ),
+    ) ?? false;
   }
 
   void _handleTabChange() {
@@ -287,7 +344,7 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
     }
   }
 
-  Widget _buildShimmerGrid() {
+  Widget _buildLoadingShimmer() {
     return GridView.builder(
       padding: const EdgeInsets.all(12),
       itemCount: 9, // Number of shimmer items
@@ -312,36 +369,81 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
     );
   }
 
+  Widget _buildErrorView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Colors.red,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Error loading statuses',
+              style: Theme.of(context).textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              controller.errorMessage.value,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16, color: Colors.red),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => controller.loadStatuses(),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () => PermissionUtils.openAppSettingsPage(),
+              child: const Text('Open Settings'),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () async {
+                await controller.checkAndRequestPermissions();
+                await controller.loadStatuses();
+              },
+              child: const Text('Try with File Picker'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         title: _isSearching
             ? TextField(
                 controller: _searchController,
-                focusNode: _searchFocusNode,
                 autofocus: true,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Search statuses...',
-                  hintStyle: TextStyle(color: Colors.white70),
                   border: InputBorder.none,
+                  hintStyle: const TextStyle(color: Colors.white70),
                 ),
+                style: const TextStyle(color: Colors.white),
                 onChanged: (_) => setState(() {}),
               )
-            : const Text(
-                'Status Saver',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 20,
-                ),
-              ),
-        backgroundColor: AppTheme.primaryColor,
-        elevation: 0,
-        centerTitle: true,
+            : const Text('Status Saver'),
         actions: [
+          if (!_isSearching)
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _refreshStatuses,
+            ),
           IconButton(
             icon: Icon(_isSearching ? Icons.close : Icons.search),
             onPressed: () {
@@ -349,7 +451,6 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
                 _isSearching = !_isSearching;
                 if (!_isSearching) {
                   _searchController.clear();
-                  _searchFocusNode.unfocus();
                 } else {
                   _searchFocusNode.requestFocus();
                 }
@@ -359,39 +460,65 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
         ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
           tabs: const [
             Tab(text: 'All'),
             Tab(text: 'Images'),
             Tab(text: 'Videos'),
           ],
+          onTap: (index) {
+            setState(() {
+              _currentFilter = StatusType.values[index];
+            });
+          },
         ),
       ),
       body: Obx(() {
-        if (controller.isLoading.value) {
-          return _buildShimmerGrid();
+        if (controller.permissionError.value.isNotEmpty) {
+          return _buildErrorView();
         }
 
-        if (controller.statusList.isEmpty) {
+        if (controller.isLoading.value) {
+          return _buildLoadingShimmer();
+        }
+
+        if (controller.errorMessage.value.isNotEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.warning_amber_rounded, size: 48, color: Colors.orange),
+                  const SizedBox(height: 16),
+                  Text(
+                    controller.errorMessage.value,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () => controller.loadStatuses(),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final statuses = _getFilteredStatuses();
+
+        if (statuses.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.sentiment_dissatisfied,
-                  size: 64,
-                  color: Colors.grey[400],
-                ),
+                const Icon(Icons.inbox, size: 64, color: Colors.grey),
                 const SizedBox(height: 16),
-                Text(
+                const Text(
                   'No statuses found',
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: TextStyle(fontSize: 18, color: Colors.grey),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -403,7 +530,7 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
-                  onPressed: controller.fetchStatuses,
+                  onPressed: controller.loadStatuses,
                   icon: const Icon(Icons.refresh),
                   label: const Text('Refresh'),
                   style: ElevatedButton.styleFrom(
@@ -460,7 +587,7 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
         }
 
         return RefreshIndicator(
-          onRefresh: () => controller.fetchStatuses(),
+          onRefresh: () => controller.loadStatuses(),
           color: AppTheme.primaryColor,
           child: GridView.builder(
             padding: const EdgeInsets.all(12),
@@ -478,7 +605,7 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
         );
       }),
       floatingActionButton: FloatingActionButton(
-        onPressed: controller.fetchStatuses,
+        onPressed: controller.loadStatuses,
         backgroundColor: AppTheme.primaryColor,
         child: const Icon(Icons.refresh, color: Colors.white),
       ),
