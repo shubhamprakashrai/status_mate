@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:status_mate/app/modules/status/controllers/status_controller.dart' as status_controller;
+import 'package:status_mate/app/modules/status/controllers/status_controller.dart'
+    as status_controller;
 import 'package:status_mate/app/modules/status/view/image_preview.dart';
 import 'package:status_mate/app/modules/status/view/video_preview_page.dart';
 import 'package:status_mate/app/theme/app_theme.dart';
@@ -21,10 +22,13 @@ class StatusView extends StatefulWidget {
   State<StatusView> createState() => _StatusViewState();
 }
 
-class _StatusViewState extends State<StatusView> with SingleTickerProviderStateMixin {
-  final status_controller.StatusController _statusController = Get.find<status_controller.StatusController>();
+class _StatusViewState extends State<StatusView>
+    with SingleTickerProviderStateMixin {
+  final status_controller.StatusController _statusController =
+      Get.find<status_controller.StatusController>();
   late TabController _tabController;
-  status_controller.StatusType _currentFilter = status_controller.StatusType.all;
+  status_controller.StatusType _currentFilter =
+      status_controller.StatusType.all;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   // Remove unused field
@@ -32,7 +36,7 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this); // Changed length to 3 for All, Images, Videos
+    _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_handleTabChange);
     _checkPermissions();
   }
@@ -60,7 +64,8 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
 
   void _handleTabChange() {
     setState(() {
-      _currentFilter = status_controller.StatusType.values[_tabController.index];
+      _currentFilter =
+          status_controller.StatusType.values[_tabController.index];
     });
   }
 
@@ -77,8 +82,10 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
     return _statusController.statusList.where((file) {
       final isVideo = file.path.toLowerCase().endsWith('.mp4');
       final matchesSearch = _searchController.text.isEmpty ||
-          file.path.toLowerCase().contains(_searchController.text.toLowerCase());
-      
+          file.path
+              .toLowerCase()
+              .contains(_searchController.text.toLowerCase());
+
       if (_currentFilter == status_controller.StatusType.image) {
         return !isVideo && matchesSearch;
       } else if (_currentFilter == status_controller.StatusType.video) {
@@ -97,11 +104,10 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
           context,
           PageRouteBuilder(
             pageBuilder: (context, animation, secondaryAnimation) {
-              return isVideo 
-                  ? VideoPreviewPage(file) 
-                  : ImagePreviewPage(file);
+              return isVideo ? VideoPreviewPage(file) : ImagePreviewPage(file);
             },
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
               return FadeTransition(opacity: animation, child: child);
             },
           ),
@@ -115,7 +121,6 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
       onShare: () => _shareFile(file),
     );
   }
-
 
   Future<void> _downloadFile(File file) async {
     try {
@@ -221,9 +226,9 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
     return TabBar(
       controller: _tabController,
       tabs: const [
-        Tab(text: 'Image'),
-        Tab(text: 'Video'),
         Tab(text: 'All'),
+        Tab(text: 'Images'),
+        Tab(text: 'Videos'),
       ],
       onTap: (index) {
         setState(() {
@@ -244,7 +249,7 @@ class _StatusViewState extends State<StatusView> with SingleTickerProviderStateM
         if (_statusController.isLoading.value) {
           return _buildLoadingShimmer();
         }
-        
+
         final statuses = _getFilteredStatuses();
         if (statuses.isEmpty) {
           return _buildEmptyState();
