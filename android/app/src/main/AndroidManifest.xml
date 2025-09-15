@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    package="com.status_mate">
+    package="com.status.mate">
 
     <!-- Permissions -->
     <!-- For Android 10 (API 29) and below -->

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:status_mate/app/modules/status/controllers/status_controller.dart'
@@ -118,7 +119,7 @@ class _StatusViewState extends State<StatusView>
         Get.snackbar('Info', 'Delete functionality will be implemented here');
       },
       onSave: () => _downloadFile(file),
-      onShare: () => _shareFile(file),
+      onShare: () => _shareFile(file, context),
     );
   }
 
@@ -155,17 +156,46 @@ class _StatusViewState extends State<StatusView>
     }
   }
 
-  Future<void> _shareFile(File file) async {
+  Future<void> _shareFile(File file, BuildContext context) async {
     try {
-      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+      // Copy to cache (for Android 11+ scoped storage issues)
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = await file.copy(
+        '${tempDir.path}/${file.uri.pathSegments.last}',
+      );
+
+      ShareParams params;
+
+      // Only set sharePositionOrigin for iPad
+      if (Theme.of(context).platform == TargetPlatform.iOS &&
+          MediaQuery.of(context).size.shortestSide > 600) {
+        final box = context.findRenderObject();
+        if (box is RenderBox) {
+          params = ShareParams(
+            files: [XFile(tempFile.path)],
+            sharePositionOrigin: box.localToGlobal(Offset.zero) & box.size,
+          );
+        } else {
+          // fallback if context isn't a RenderBox
+          params = ShareParams(files: [XFile(tempFile.path)]);
+        }
+      } else {
+        // Android / iPhone → no need for sharePositionOrigin
+        params = ShareParams(files: [XFile(tempFile.path)]);
+      }
+
+      await SharePlus.instance.share(params);
     } catch (e) {
+      print("Failed to share file: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to share file')),
+          SnackBar(content: Text('Failed to share file: $e')),
         );
       }
     }
   }
+
+
 
   Widget _buildLoadingShimmer() {
     return GridView.builder(
