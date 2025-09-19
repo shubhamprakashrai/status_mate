@@ -95,13 +95,13 @@ class StatusItem extends StatelessWidget {
               alignment: MainAxisAlignment.spaceEvenly,
               overflowSpacing: 12,
               children: [
-                // InkWell(
-                //   onTap: onSave,
-                //   child: Padding(
-                //     padding: const EdgeInsets.all(12.0),
-                //     child: const Icon(Icons.save_alt, size: 20),
-                //   ),
-                // ),
+                InkWell(
+                  onTap: onSave,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: const Icon(Icons.save_alt, size: 20),
+                  ),
+                ),
 
                 InkWell(
                   onTap: onShare,

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:media_scanner/media_scanner.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shimmer/shimmer.dart';
@@ -124,12 +125,35 @@ class _StatusViewState extends State<StatusView>
   }
 
   Future<void> _downloadFile(File file) async {
-    try {
-      await _statusController.downloadStatus(file);
+  try {
+    final fileName = file.uri.pathSegments.last;
+    final isVideo = fileName.toLowerCase().endsWith('.mp4');
+
+    if (Platform.isAndroid) {
+      final downloadsDir = Directory('/storage/emulated/0/Download');
+
+      if (!await downloadsDir.exists()) {
+        await downloadsDir.create(recursive: true);
+      }
+
+      // Choose correct folder
+      final saveDir = isVideo
+          ? Directory('${downloadsDir.path}/StatusMate/Videos')
+          : Directory('${downloadsDir.path}/StatusMate/Images');
+
+      if (!await saveDir.exists()) {
+        await saveDir.create(recursive: true);
+      }
+
+      final newPath = '${saveDir.path}/$fileName';
+      await file.copy(newPath);
+
+       await MediaScanner.loadMedia(path: newPath);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Downloaded successfully!'),
+            content: Text('Saved to: $newPath'),
             behavior: SnackBarBehavior.floating,
             backgroundColor: AppTheme.primaryColor,
             shape: RoundedRectangleBorder(
@@ -139,22 +163,30 @@ class _StatusViewState extends State<StatusView>
           ),
         );
       }
-    } catch (e) {
+    } else {
+      // iOS: save to app documents
+      final appDir = await getApplicationDocumentsDirectory();
+      final newPath = '${appDir.path}/$fileName';
+      await file.copy(newPath);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Download failed: ${e.toString()}'),
-            backgroundColor: AppTheme.errorColor,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            margin: const EdgeInsets.all(16),
-          ),
+          SnackBar(content: Text('Saved to app storage: $newPath')),
         );
       }
     }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Download failed: $e'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    }
   }
+}
+
 
   Future<void> _shareFile(File file, BuildContext context) async {
     try {
