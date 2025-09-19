@@ -13,7 +13,7 @@ apkRelease:
 
 ## Build Android App Bundle (release) - this is the one you upload to Play Store
 bundleRelease:
-	$(FLUTTER) build appbundle --release
+	$(FLUTTER) build appbundle --release --tree-shake-icons
 
 ## Build Android APK (debug)
 apkDebug:
