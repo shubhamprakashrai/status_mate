@@ -24,7 +24,7 @@ class StatusView extends StatefulWidget {
 
 class _StatusViewState extends State<StatusView>
     with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
-  // Add AutomaticKeepAliveClientMixin to preserve tab state (e.g., scroll position)
+      
   @override
   bool get wantKeepAlive => true;
 
