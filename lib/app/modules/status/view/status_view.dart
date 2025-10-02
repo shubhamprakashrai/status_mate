@@ -12,10 +12,8 @@ import 'package:status_mate/app/modules/status/view/video_preview_page.dart';
 import 'package:status_mate/app/theme/app_theme.dart';
 import 'package:status_mate/core/utils/permission_utils.dart';
 
-// Widgets
 import 'widgets/status_item.dart';
 import 'widgets/permission_dialog.dart';
-// Remove unused import
 
 class StatusView extends StatefulWidget {
   const StatusView({super.key});
@@ -25,21 +23,26 @@ class StatusView extends StatefulWidget {
 }
 
 class _StatusViewState extends State<StatusView>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  // Add AutomaticKeepAliveClientMixin to preserve tab state (e.g., scroll position)
+  @override
+  bool get wantKeepAlive => true;
+
   final status_controller.StatusController _statusController =
       Get.find<status_controller.StatusController>();
   late TabController _tabController;
-  status_controller.StatusType _currentFilter =
-      status_controller.StatusType.all;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  // Remove unused field
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(_handleTabChange);
+    _tabController = TabController(
+      length: 3, // Hardcode to 3 for clarity (All, Images, Videos)
+      vsync: this,
+      initialIndex: 0,
+    );
+    // No need for listener anymore—TabBarView handles changes
     _checkPermissions();
   }
 
@@ -64,59 +67,112 @@ class _StatusViewState extends State<StatusView>
     return await PermissionDialog.show(context);
   }
 
-  void _handleTabChange() {
-    setState(() {
-      _currentFilter =
-          status_controller.StatusType.values[_tabController.index];
+  // NEW: Helper to get filtered list for a specific tab (removes global _currentFilter)
+  List<File> _getFilteredStatuses(status_controller.StatusType filterType) {
+    return _statusController.statusList.where((file) {
+      final matchesSearch = _searchController.text.isEmpty ||
+          file.path.toLowerCase().contains(_searchController.text.toLowerCase());
+      
+      final isVideoFile = _isVideo(file);
+      
+      switch (filterType) {
+        case status_controller.StatusType.all:
+          return matchesSearch;
+        case status_controller.StatusType.image:
+          return !isVideoFile && matchesSearch;
+        case status_controller.StatusType.video:
+          return isVideoFile && matchesSearch;
+        default:
+          return matchesSearch; // Fallback
+      }
+    }).toList();
+  }
+
+  // UPDATED: More robust video detection (added common WhatsApp/status formats)
+  bool _isVideo(File file) {
+    final path = file.path.toLowerCase();
+    return path.endsWith('.mp4') ||
+           path.endsWith('.avi') ||
+           path.endsWith('.mov') ||
+           path.endsWith('.3gp') ||
+           path.endsWith('.mkv') ||
+           path.endsWith('.webm') ||
+           path.endsWith('.m4v') ||  // Common iOS/video status
+           path.endsWith('.flv');
+  }
+
+  // NEW: Single content builder for all tabs (reuses filtering)
+  Widget _buildTabContent(status_controller.StatusType filterType) {
+    return Obx(() {
+      if (_statusController.isLoading.value) {
+        return _buildLoadingShimmer();
+      }
+
+      final statuses = _getFilteredStatuses(filterType);
+      if (statuses.isEmpty) {
+        return _buildEmptyState();
+      }
+
+      return RefreshIndicator(
+        onRefresh: _refreshStatuses,
+        child: GridView.builder(
+          padding: const EdgeInsets.all(8.0),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 8.0,
+            mainAxisSpacing: 8.0,
+            childAspectRatio: 0.7,
+          ),
+          itemCount: statuses.length,
+          itemBuilder: (context, index) {
+            return _buildStatusItem(statuses[index], context);
+          },
+        ),
+      );
     });
+  }
+
+  PreferredSizeWidget _buildTabBar() {
+    return TabBar(
+      controller: _tabController,
+      tabs: const [
+        Tab(text: 'All'),
+        Tab(text: 'Images'),
+        Tab(text: 'Videos'),
+      ],
+      onTap: (index) {
+        _searchController.clear(); // Clear search on tab switch
+        _tabController.animateTo(index); // Smooth transition
+      },
+    );
   }
 
   @override
   void dispose() {
-    _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
   }
 
-  List<File> _getFilteredStatuses() {
-    return _statusController.statusList.where((file) {
-      final isVideo = file.path.toLowerCase().endsWith('.mp4');
-      final matchesSearch = _searchController.text.isEmpty ||
-          file.path
-              .toLowerCase()
-              .contains(_searchController.text.toLowerCase());
-
-      if (_currentFilter == status_controller.StatusType.image) {
-        return !isVideo && matchesSearch;
-      } else if (_currentFilter == status_controller.StatusType.video) {
-        return isVideo && matchesSearch;
-      }
-      return matchesSearch;
-    }).toList();
-  }
-
   Widget _buildStatusItem(File file, BuildContext context) {
     return StatusItem(
       file: file,
       onTap: () {
-        final isVideo = file.path.toLowerCase().endsWith('.mp4');
+        final isVideo = _isVideo(file); // UPDATED: Use consistent _isVideo()
         Navigator.push(
           context,
           PageRouteBuilder(
             pageBuilder: (context, animation, secondaryAnimation) {
               return isVideo ? VideoPreviewPage(file) : ImagePreviewPage(file);
             },
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
               return FadeTransition(opacity: animation, child: child);
             },
           ),
         );
       },
       onDelete: () {
-        // Implement delete functionality
         Get.snackbar('Info', 'Delete functionality will be implemented here');
       },
       onSave: () => _downloadFile(file),
@@ -124,128 +180,124 @@ class _StatusViewState extends State<StatusView>
     );
   }
 
+  // UPDATED: Use _isVideo() for consistency (was only checking .mp4)
   Future<void> _downloadFile(File file) async {
-  try {
-    final fileName = file.uri.pathSegments.last;
-    final isVideo = fileName.toLowerCase().endsWith('.mp4');
+    try {
+      final fileName = file.uri.pathSegments.last;
+      final isVideo = _isVideo(file); // FIXED: Now uses robust check
 
-    if (Platform.isAndroid) {
-      final downloadsDir = Directory('/storage/emulated/0/Download');
+      if (Platform.isAndroid) {
+        final downloadsDir = Directory('/storage/emulated/0/Download');
 
-      if (!await downloadsDir.exists()) {
-        await downloadsDir.create(recursive: true);
+        if (!await downloadsDir.exists()) {
+          await downloadsDir.create(recursive: true);
+        }
+
+        // Choose correct folder
+        final saveDir = isVideo
+            ? Directory('${downloadsDir.path}/StatusMate/Videos')
+            : Directory('${downloadsDir.path}/StatusMate/Images');
+
+        if (!await saveDir.exists()) {
+          await saveDir.create(recursive: true);
+        }
+
+        final newPath = '${saveDir.path}/$fileName';
+        await file.copy(newPath);
+
+        await MediaScanner.loadMedia(path: newPath);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Saved to: $newPath'),
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: AppTheme.primaryColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              margin: const EdgeInsets.all(16),
+            ),
+          );
+        }
+      } else {
+        // iOS: save to app documents
+        final appDir = await getApplicationDocumentsDirectory();
+        final newPath = '${appDir.path}/$fileName';
+        await file.copy(newPath);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Saved to app storage: $newPath')),
+          );
+        }
       }
-
-      // Choose correct folder
-      final saveDir = isVideo
-          ? Directory('${downloadsDir.path}/StatusMate/Videos')
-          : Directory('${downloadsDir.path}/StatusMate/Images');
-
-      if (!await saveDir.exists()) {
-        await saveDir.create(recursive: true);
-      }
-
-      final newPath = '${saveDir.path}/$fileName';
-      await file.copy(newPath);
-
-       await MediaScanner.loadMedia(path: newPath);
-
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Saved to: $newPath'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: AppTheme.primaryColor,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            margin: const EdgeInsets.all(16),
+            content: Text('Download failed: $e'),
+            backgroundColor: AppTheme.errorColor,
           ),
         );
       }
-    } else {
-      // iOS: save to app documents
-      final appDir = await getApplicationDocumentsDirectory();
-      final newPath = '${appDir.path}/$fileName';
-      await file.copy(newPath);
+    }
+  }
 
+  Future<void> _shareFile(File file, BuildContext context) async {
+    try {
+      // Check if the file exists
+      if (!await file.exists()) {
+        throw Exception('File does not exist');
+      }
+
+      // Get the file extension
+      final extension = file.path.split('.').last.toLowerCase();
+      final mimeType = _getMimeType(extension);
+
+      // Create a unique filename in the cache directory
+      final tempDir = await getTemporaryDirectory();
+      final uniqueFileName = '${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final tempFile = await file.copy('${tempDir.path}/$uniqueFileName');
+
+      // Share the file using the file provider
+      await Share.shareXFiles( // FIXED: Use shareXFiles (simpler than SharePlus.instance)
+        [XFile(tempFile.path, mimeType: mimeType)],
+        sharePositionOrigin: const Rect.fromLTWH(0, 0, 10, 10), // Minimal rect
+      );
+
+    } catch (e, stackTrace) {
+      debugPrint('Error sharing file: $e');
+      debugPrint('Stack trace: $stackTrace');
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Saved to app storage: $newPath')),
+          SnackBar(
+            content: Text('Failed to share file: ${e.toString().split(':').last.trim()}'),
+            duration: const Duration(seconds: 3),
+          ),
         );
       }
     }
-  } catch (e) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Download failed: $e'),
-          backgroundColor: AppTheme.errorColor,
-        ),
-      );
+  }
+
+  String _getMimeType(String extension) {
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'mp4':
+        return 'video/mp4';
+      case '3gp':
+        return 'video/3gpp';
+      default:
+        return 'application/octet-stream';
     }
   }
-}
-
-
-  Future<void> _shareFile(File file, BuildContext context) async {
-  try {
-    // Check if the file exists
-    if (!await file.exists()) {
-      throw Exception('File does not exist');
-    }
-
-    // Get the file extension
-    final extension = file.path.split('.').last.toLowerCase();
-    final mimeType = _getMimeType(extension);
-
-    // Create a unique filename in the cache directory
-    final tempDir = await getTemporaryDirectory();
-    final uniqueFileName = '${DateTime.now().millisecondsSinceEpoch}.$extension';
-    final tempFile = await file.copy('${tempDir.path}/$uniqueFileName');
-
-    // Share the file using the file provider
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(tempFile.path, mimeType: mimeType)],
-        sharePositionOrigin: Rect.zero,
-      ),
-    );
-
-  } catch (e, stackTrace) {
-    debugPrint('Error sharing file: $e');
-    debugPrint('Stack trace: $stackTrace');
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to share file: ${e.toString().split(':').last.trim()}'),
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    }
-  }
-}
-
-String _getMimeType(String extension) {
-  switch (extension) {
-    case 'jpg':
-    case 'jpeg':
-      return 'image/jpeg';
-    case 'png':
-      return 'image/png';
-    case 'gif':
-      return 'image/gif';
-    case 'mp4':
-      return 'video/mp4';
-    case '3gp':
-      return 'video/3gpp';
-    default:
-      return 'application/octet-stream';
-  }
-}
-
-
 
   Widget _buildLoadingShimmer() {
     return GridView.builder(
@@ -271,8 +323,6 @@ String _getMimeType(String extension) {
       },
     );
   }
-
-  // Error handling is now done in _buildEmptyState
 
   Widget _buildEmptyState() {
     return Center(
@@ -302,56 +352,23 @@ String _getMimeType(String extension) {
     );
   }
 
-  PreferredSizeWidget _buildTabBar() {
-    return TabBar(
-      controller: _tabController,
-      tabs: const [
-        Tab(text: 'All'),
-        Tab(text: 'Images'),
-        Tab(text: 'Videos'),
-      ],
-      onTap: (index) {
-        setState(() {
-          _currentFilter = status_controller.StatusType.values[index];
-        });
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     return Scaffold(
       appBar: AppBar(
         title: const Text('Status Saver'),
         bottom: _buildTabBar(),
       ),
-      body: Obx(() {
-        if (_statusController.isLoading.value) {
-          return _buildLoadingShimmer();
-        }
-
-        final statuses = _getFilteredStatuses();
-        if (statuses.isEmpty) {
-          return _buildEmptyState();
-        }
-
-        return RefreshIndicator(
-          onRefresh: _refreshStatuses,
-          child: GridView.builder(
-            padding: const EdgeInsets.all(8.0),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 8.0,
-              mainAxisSpacing: 8.0,
-              childAspectRatio: 0.7,
-            ),
-            itemCount: statuses.length,
-            itemBuilder: (context, index) {
-              return _buildStatusItem(statuses[index], context);
-            },
-          ),
-        );
-      }),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          // NEW: Separate content per tab—guaranteed rebuild on switch
+          _buildTabContent(status_controller.StatusType.all),
+          _buildTabContent(status_controller.StatusType.image),
+          _buildTabContent(status_controller.StatusType.video),
+        ],
+      ),
     );
   }
 }

@@ -1,8 +1,6 @@
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
-import 'package:intl/intl.dart';
 
 class StatusItem extends StatelessWidget {
   final File file;
@@ -73,19 +71,6 @@ class StatusItem extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  // Row(
-                  //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  //   children: [
-                  //     Text(
-                  //       fileSize,
-                  //       style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  //     ),
-                  //     Text(
-                  //       lastModified,
-                  //       style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  //     ),
-                  //   ],
-                  // ),
                 ],
               ),
             ),
@@ -110,29 +95,11 @@ class StatusItem extends StatelessWidget {
                     child: const Icon(Icons.share, size: 20),
                   ),
                 ),
-
-                // const SizedBox(width: 8),
-
-                // InkWell(
-                //   child: const Icon(Icons.delete, size: 20),
-                //   onTap: onDelete,
-                // ),
               ],
             ),
           ],
         ),
       ),
     );
-  }
-
-  String _formatFileSize(int bytes) {
-    if (bytes <= 0) return '0 B';
-    const suffixes = ['B', 'KB', 'MB', 'GB'];
-    var i = (log(bytes) / log(1024)).floor();
-    return '${(bytes / pow(1024, i)).toStringAsFixed(1)} ${suffixes[i]}';
-  }
-
-  String _formatDate(DateTime date) {
-    return DateFormat('MMM d, y HH:mm').format(date);
   }
 }
