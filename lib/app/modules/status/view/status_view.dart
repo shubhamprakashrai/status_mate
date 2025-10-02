@@ -189,43 +189,61 @@ class _StatusViewState extends State<StatusView>
 
 
   Future<void> _shareFile(File file, BuildContext context) async {
-    try {
-      // Copy to cache (for Android 11+ scoped storage issues)
-      final tempDir = await getTemporaryDirectory();
-      final tempFile = await file.copy(
-        '${tempDir.path}/${file.uri.pathSegments.last}',
+  try {
+    // Check if the file exists
+    if (!await file.exists()) {
+      throw Exception('File does not exist');
+    }
+
+    // Get the file extension
+    final extension = file.path.split('.').last.toLowerCase();
+    final mimeType = _getMimeType(extension);
+
+    // Create a unique filename in the cache directory
+    final tempDir = await getTemporaryDirectory();
+    final uniqueFileName = '${DateTime.now().millisecondsSinceEpoch}.$extension';
+    final tempFile = await file.copy('${tempDir.path}/$uniqueFileName');
+
+    // Share the file using the file provider
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(tempFile.path, mimeType: mimeType)],
+        sharePositionOrigin: Rect.zero,
+      ),
+    );
+
+  } catch (e, stackTrace) {
+    debugPrint('Error sharing file: $e');
+    debugPrint('Stack trace: $stackTrace');
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to share file: ${e.toString().split(':').last.trim()}'),
+          duration: const Duration(seconds: 3),
+        ),
       );
-
-      ShareParams params;
-
-      // Only set sharePositionOrigin for iPad
-      if (Theme.of(context).platform == TargetPlatform.iOS &&
-          MediaQuery.of(context).size.shortestSide > 600) {
-        final box = context.findRenderObject();
-        if (box is RenderBox) {
-          params = ShareParams(
-            files: [XFile(tempFile.path)],
-            sharePositionOrigin: box.localToGlobal(Offset.zero) & box.size,
-          );
-        } else {
-          // fallback if context isn't a RenderBox
-          params = ShareParams(files: [XFile(tempFile.path)]);
-        }
-      } else {
-        // Android / iPhone → no need for sharePositionOrigin
-        params = ShareParams(files: [XFile(tempFile.path)]);
-      }
-
-      await SharePlus.instance.share(params);
-    } catch (e) {
-      print("Failed to share file: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to share file: $e')),
-        );
-      }
     }
   }
+}
+
+String _getMimeType(String extension) {
+  switch (extension) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'gif':
+      return 'image/gif';
+    case 'mp4':
+      return 'video/mp4';
+    case '3gp':
+      return 'video/3gpp';
+    default:
+      return 'application/octet-stream';
+  }
+}
 
 
 
