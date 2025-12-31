@@ -24,7 +24,6 @@ class StatusView extends StatefulWidget {
 
 class _StatusViewState extends State<StatusView>
     with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
-      
   @override
   bool get wantKeepAlive => true;
 
@@ -38,11 +37,10 @@ class _StatusViewState extends State<StatusView>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 3, // Hardcode to 3 for clarity (All, Images, Videos)
+      length: 3,
       vsync: this,
       initialIndex: 0,
     );
-    // No need for listener anymore—TabBarView handles changes
     _checkPermissions();
   }
 
@@ -67,14 +65,13 @@ class _StatusViewState extends State<StatusView>
     return await PermissionDialog.show(context);
   }
 
-  // NEW: Helper to get filtered list for a specific tab (removes global _currentFilter)
   List<File> _getFilteredStatuses(status_controller.StatusType filterType) {
     return _statusController.statusList.where((file) {
       final matchesSearch = _searchController.text.isEmpty ||
           file.path.toLowerCase().contains(_searchController.text.toLowerCase());
-      
+
       final isVideoFile = _isVideo(file);
-      
+
       switch (filterType) {
         case status_controller.StatusType.all:
           return matchesSearch;
@@ -86,20 +83,18 @@ class _StatusViewState extends State<StatusView>
     }).toList();
   }
 
-  // UPDATED: More robust video detection (added common WhatsApp/status formats)
   bool _isVideo(File file) {
     final path = file.path.toLowerCase();
     return path.endsWith('.mp4') ||
-           path.endsWith('.avi') ||
-           path.endsWith('.mov') ||
-           path.endsWith('.3gp') ||
-           path.endsWith('.mkv') ||
-           path.endsWith('.webm') ||
-           path.endsWith('.m4v') ||  // Common iOS/video status
-           path.endsWith('.flv');
+        path.endsWith('.avi') ||
+        path.endsWith('.mov') ||
+        path.endsWith('.3gp') ||
+        path.endsWith('.mkv') ||
+        path.endsWith('.webm') ||
+        path.endsWith('.m4v') ||
+        path.endsWith('.flv');
   }
 
-  // NEW: Single content builder for all tabs (reuses filtering)
   Widget _buildTabContent(status_controller.StatusType filterType) {
     return Obx(() {
       if (_statusController.isLoading.value) {
@@ -113,35 +108,119 @@ class _StatusViewState extends State<StatusView>
 
       return RefreshIndicator(
         onRefresh: _refreshStatuses,
-        child: GridView.builder(
-          padding: const EdgeInsets.all(8.0),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 8.0,
-            mainAxisSpacing: 8.0,
-            childAspectRatio: 0.7,
+        edgeOffset: 0,
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
           ),
-          itemCount: statuses.length,
-          itemBuilder: (context, index) {
-            return _buildStatusItem(statuses[index], context);
-          },
+          cacheExtent: 500, // Pre-cache items for smoother scrolling
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.all(12.0),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12.0,
+                  mainAxisSpacing: 12.0,
+                  childAspectRatio: 0.75,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    return RepaintBoundary(
+                      child: _buildStatusItem(statuses[index], context, index),
+                    );
+                  },
+                  childCount: statuses.length,
+                  addAutomaticKeepAlives: true,
+                  addRepaintBoundaries: false, // We handle this manually
+                ),
+              ),
+            ),
+            // Add bottom padding for better scroll experience
+            const SliverPadding(padding: EdgeInsets.only(bottom: 20)),
+          ],
         ),
       );
     });
   }
 
   PreferredSizeWidget _buildTabBar() {
-    return TabBar(
-      controller: _tabController,
-      tabs: const [
-        Tab(text: 'All'),
-        Tab(text: 'Images'),
-        Tab(text: 'Videos'),
-      ],
-      onTap: (index) {
-        _searchController.clear(); // Clear search on tab switch
-        _tabController.animateTo(index); // Smooth transition
-      },
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(60),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1D4D3A), // Darker green for contrast
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: TabBar(
+          controller: _tabController,
+          indicator: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF25D366), Color(0xFF20BD5A)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF25D366).withValues(alpha: 0.4),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          indicatorSize: TabBarIndicatorSize.tab,
+          dividerColor: Colors.transparent,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white.withValues(alpha: 0.6),
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 13,
+          ),
+          splashBorderRadius: BorderRadius.circular(10),
+          tabs: const [
+            Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.grid_view_rounded, size: 18),
+                  SizedBox(width: 6),
+                  Text('All'),
+                ],
+              ),
+            ),
+            Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.image_rounded, size: 18),
+                  SizedBox(width: 6),
+                  Text('Images'),
+                ],
+              ),
+            ),
+            Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.videocam_rounded, size: 18),
+                  SizedBox(width: 6),
+                  Text('Videos'),
+                ],
+              ),
+            ),
+          ],
+          onTap: (index) {
+            _searchController.clear();
+          },
+        ),
+      ),
     );
   }
 
@@ -153,11 +232,12 @@ class _StatusViewState extends State<StatusView>
     super.dispose();
   }
 
-  Widget _buildStatusItem(File file, BuildContext context) {
+  Widget _buildStatusItem(File file, BuildContext context, int index) {
     return StatusItem(
+      key: ValueKey(file.path), // Stable key for better recycling
       file: file,
       onTap: () {
-        final isVideo = _isVideo(file); // UPDATED: Use consistent _isVideo()
+        final isVideo = _isVideo(file);
         Navigator.push(
           context,
           PageRouteBuilder(
@@ -178,11 +258,10 @@ class _StatusViewState extends State<StatusView>
     );
   }
 
-  // UPDATED: Use _isVideo() for consistency (was only checking .mp4)
   Future<void> _downloadFile(File file) async {
     try {
       final fileName = file.uri.pathSegments.last;
-      final isVideo = _isVideo(file); // FIXED: Now uses robust check
+      final isVideo = _isVideo(file);
 
       if (Platform.isAndroid) {
         final downloadsDir = Directory('/storage/emulated/0/Download');
@@ -191,7 +270,6 @@ class _StatusViewState extends State<StatusView>
           await downloadsDir.create(recursive: true);
         }
 
-        // Choose correct folder
         final saveDir = isVideo
             ? Directory('${downloadsDir.path}/StatusMate/Videos')
             : Directory('${downloadsDir.path}/StatusMate/Images');
@@ -219,7 +297,6 @@ class _StatusViewState extends State<StatusView>
           );
         }
       } else {
-        // iOS: save to app documents
         final appDir = await getApplicationDocumentsDirectory();
         final newPath = '${appDir.path}/$fileName';
         await file.copy(newPath);
@@ -244,32 +321,27 @@ class _StatusViewState extends State<StatusView>
 
   Future<void> _shareFile(File file, BuildContext context) async {
     try {
-      // Check if the file exists
       if (!await file.exists()) {
         throw Exception('File does not exist');
       }
 
-      // Get the file extension
       final extension = file.path.split('.').last.toLowerCase();
       final mimeType = _getMimeType(extension);
 
-      // Create a unique filename in the cache directory
       final tempDir = await getTemporaryDirectory();
       final uniqueFileName = '${DateTime.now().millisecondsSinceEpoch}.$extension';
       final tempFile = await file.copy('${tempDir.path}/$uniqueFileName');
 
-      // Share the file using the file provider
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(tempFile.path, mimeType: mimeType)],
           sharePositionOrigin: const Rect.fromLTWH(0, 0, 10, 10),
         ),
       );
-
     } catch (e, stackTrace) {
       debugPrint('Error sharing file: $e');
       debugPrint('Stack trace: $stackTrace');
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -300,61 +372,80 @@ class _StatusViewState extends State<StatusView>
   }
 
   Widget _buildLoadingShimmer() {
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: 9, // Number of shimmer items
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.8,
-      ),
-      itemBuilder: (context, index) {
-        return Shimmer.fromColors(
-          baseColor: Colors.grey[300]!,
-          highlightColor: Colors.grey[100]!,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+    return CustomScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(12),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 0.75,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                return Shimmer.fromColors(
+                  baseColor: Colors.grey[300]!,
+                  highlightColor: Colors.grey[100]!,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                );
+              },
+              childCount: 6,
             ),
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.hourglass_empty,
-            size: 64,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _statusController.errorMessage.value.isEmpty
-                ? 'No statuses found'
-                : _statusController.errorMessage.value,
-            style: const TextStyle(fontSize: 16),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: _refreshStatuses,
-            child: const Text('Refresh'),
-          ),
-        ],
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
       ),
+      slivers: [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.hourglass_empty,
+                  size: 64,
+                  color: Colors.grey[400],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _statusController.errorMessage.value.isEmpty
+                      ? 'No statuses found'
+                      : _statusController.errorMessage.value,
+                  style: const TextStyle(fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: _refreshStatuses,
+                  child: const Text('Refresh'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    super.build(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Status Saver'),
@@ -362,8 +453,8 @@ class _StatusViewState extends State<StatusView>
       ),
       body: TabBarView(
         controller: _tabController,
+        physics: const BouncingScrollPhysics(), // Smooth tab switching
         children: [
-          // NEW: Separate content per tab—guaranteed rebuild on switch
           _buildTabContent(status_controller.StatusType.all),
           _buildTabContent(status_controller.StatusType.image),
           _buildTabContent(status_controller.StatusType.video),

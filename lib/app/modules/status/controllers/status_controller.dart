@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
@@ -33,10 +32,6 @@ class StatusController extends GetxController {
   final RxString errorMessage = ''.obs;
   final Rx<StatusType> currentFilter = StatusType.all.obs;
   final _logger = AppLogger('StatusController');
-  // LocalStorageService will be used in future implementations
-  // final LocalStorageService _storage = Get.find<LocalStorageService>();
-
-  Timer? _refreshTimer;
 
   // Saved status directory path
   static String get _savedDirPath => '/storage/emulated/0/Download/StatusMate';
@@ -48,12 +43,8 @@ class StatusController extends GetxController {
   void onInit() {
     super.onInit();
     _loadStatuses();
-    // Set up auto-refresh every 30 seconds
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (!isLoading.value) {
-        _loadStatuses();
-      }
-    });
+    // Removed aggressive auto-refresh - use pull-to-refresh instead
+    // This prevents the UI from flashing every 30 seconds
   }
 
   // Check and request storage permissions
@@ -153,12 +144,6 @@ class StatusController extends GetxController {
       permissionError.value = '${AppStrings.errorOccurred}: ${e.message}';
       return false;
     }
-  }
-
-  @override
-  void onClose() {
-    _refreshTimer?.cancel();
-    super.onClose();
   }
 
   // Removed _loadInitialData as it's not currently used

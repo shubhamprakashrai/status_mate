@@ -30,7 +30,7 @@
     <application
         android:name="${applicationName}"
         android:label="Status Mate"
-        android:icon="@mipmap/launcher_icon"
+        android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true"
         android:preserveLegacyExternalStorage="true"
         android:usesCleartextTraffic="true">

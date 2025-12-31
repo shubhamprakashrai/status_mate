@@ -1,32 +1,131 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart' as perm;
 import 'package:path/path.dart' as path;
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class WhatsAppStatusUtils {
-  static const List<String> _imageExtensions = ['.jpg', '.jpeg', '.png', '.gif'];
-  static const List<String> _videoExtensions = ['.mp4', '.3gp', '.mkv', '.webm'];
+// ============ TOP-LEVEL FUNCTIONS FOR ISOLATE ============
 
-  /// Get the appropriate WhatsApp status directory based on Android version
-  static Future<List<String>> _getWhatsAppStatusDirs() async {
-    final List<String> statusDirs = [];
-    
-    // For Android 10 and below
-    statusDirs.add('/storage/emulated/0/WhatsApp/Media/.Statuses');
-    
-    // For Android 11 and above
-    statusDirs.add('/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/.Statuses');
-    
-    // Check which directories exist
-    final List<String> existingDirs = [];
-    for (final dir in statusDirs) {
-      if (await Directory(dir).exists()) {
-        existingDirs.add(dir);
+/// Scans directory and returns file paths - runs in isolate
+List<String> _scanDirectoryIsolate(String dirPath) {
+  try {
+    final directory = Directory(dirPath);
+    if (!directory.existsSync()) return [];
+
+    final List<String> filePaths = [];
+    final imageExtensions = ['.jpg', '.jpeg', '.png', '.gif'];
+    final videoExtensions = ['.mp4', '.3gp', '.mkv', '.webm', '.avi', '.mov', '.m4v', '.flv'];
+
+    final entities = directory.listSync(recursive: false);
+    for (final entity in entities) {
+      if (entity is File) {
+        final ext = path.extension(entity.path).toLowerCase();
+        if (imageExtensions.contains(ext) || videoExtensions.contains(ext)) {
+          filePaths.add(entity.path);
+        }
       }
     }
-    
-    return existingDirs;
+
+    // Sort by last modified (newest first) - done in isolate
+    filePaths.sort((a, b) {
+      try {
+        final aTime = File(a).lastModifiedSync();
+        final bTime = File(b).lastModifiedSync();
+        return bTime.compareTo(aTime);
+      } catch (e) {
+        return 0;
+      }
+    });
+
+    return filePaths;
+  } catch (e) {
+    return [];
+  }
+}
+
+/// Scans multiple directories - runs in isolate
+List<String> _scanMultipleDirectoriesIsolate(List<String> dirPaths) {
+  final List<String> allFilePaths = [];
+
+  for (final dirPath in dirPaths) {
+    allFilePaths.addAll(_scanDirectoryIsolate(dirPath));
+  }
+
+  // Sort all files by last modified
+  allFilePaths.sort((a, b) {
+    try {
+      final aTime = File(a).lastModifiedSync();
+      final bTime = File(b).lastModifiedSync();
+      return bTime.compareTo(aTime);
+    } catch (e) {
+      return 0;
+    }
+  });
+
+  return allFilePaths;
+}
+
+/// Recursively scan directory for media files - runs in isolate
+List<String> _scanRecursiveIsolate(String dirPath) {
+  try {
+    final directory = Directory(dirPath);
+    if (!directory.existsSync()) return [];
+
+    final List<String> filePaths = [];
+    final imageExtensions = ['.jpg', '.jpeg', '.png', '.gif'];
+    final videoExtensions = ['.mp4', '.3gp', '.mkv', '.webm', '.avi', '.mov', '.m4v', '.flv'];
+
+    final entities = directory.listSync(recursive: true);
+    for (final entity in entities) {
+      if (entity is File) {
+        final ext = path.extension(entity.path).toLowerCase();
+        if (imageExtensions.contains(ext) || videoExtensions.contains(ext)) {
+          filePaths.add(entity.path);
+        }
+      }
+    }
+
+    filePaths.sort((a, b) {
+      try {
+        final aTime = File(a).lastModifiedSync();
+        final bTime = File(b).lastModifiedSync();
+        return bTime.compareTo(aTime);
+      } catch (e) {
+        return 0;
+      }
+    });
+
+    return filePaths;
+  } catch (e) {
+    return [];
+  }
+}
+
+// ============ MAIN CLASS ============
+
+class WhatsAppStatusUtils {
+  static const String _prefsKeyLastSelectedDir = 'last_selected_status_dir';
+  static String? _lastSelectedDirectory;
+
+  /// Get the appropriate WhatsApp status directory based on Android version
+  static List<String> _getWhatsAppStatusDirPaths() {
+    return [
+      '/storage/emulated/0/WhatsApp/Media/.Statuses',
+      '/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/.Statuses',
+    ];
+  }
+
+  /// Check which directories exist
+  static Future<List<String>> _getExistingWhatsAppDirs() async {
+    final dirs = _getWhatsAppStatusDirPaths();
+    final existing = <String>[];
+    for (final dir in dirs) {
+      if (await Directory(dir).exists()) {
+        existing.add(dir);
+      }
+    }
+    return existing;
   }
 
   /// Check if we have storage permissions
@@ -34,16 +133,13 @@ class WhatsAppStatusUtils {
     if (await perm.Permission.manageExternalStorage.isGranted) {
       return true;
     }
-
     if (await perm.Permission.storage.isGranted) {
       return true;
     }
-
-    if (await perm.Permission.photos.isGranted && 
+    if (await perm.Permission.photos.isGranted &&
         await perm.Permission.videos.isGranted) {
       return true;
     }
-
     return false;
   }
 
@@ -53,32 +149,28 @@ class WhatsAppStatusUtils {
       return true;
     }
 
-    // For Android 13+ (API 33+)
     if (await perm.Permission.videos.isRestricted ||
         await perm.Permission.photos.isRestricted) {
       return false;
     }
 
-    // Request appropriate permissions based on Android version
     if (await perm.Permission.manageExternalStorage.isDenied) {
       final status = await perm.Permission.manageExternalStorage.request();
       if (status.isGranted) return true;
     }
 
-    // For Android 11-12 (API 30-32)
     if (await perm.Permission.storage.isDenied) {
       final status = await perm.Permission.storage.request();
       if (status.isGranted) return true;
     }
 
-    // For Android 13+ (API 33+)
-    if (await perm.Permission.photos.isDenied || 
+    if (await perm.Permission.photos.isDenied ||
         await perm.Permission.videos.isDenied) {
       final statuses = await [
         perm.Permission.photos,
         perm.Permission.videos,
       ].request();
-      
+
       if (statuses[perm.Permission.photos]!.isGranted &&
           statuses[perm.Permission.videos]!.isGranted) {
         return true;
@@ -88,43 +180,22 @@ class WhatsAppStatusUtils {
     return false;
   }
 
-  /// Get status files using direct file access (requires MANAGE_EXTERNAL_STORAGE)
+  /// Get status files using direct file access - OPTIMIZED WITH ISOLATE
   static Future<List<File>> getStatusFilesDirect() async {
-    final List<File> statusFiles = [];
-    final statusDirs = await _getWhatsAppStatusDirs();
+    final statusDirs = await _getExistingWhatsAppDirs();
+    if (statusDirs.isEmpty) return [];
 
-    for (final dir in statusDirs) {
-      try {
-        final directory = Directory(dir);
-        if (await directory.exists()) {
-          final List<FileSystemEntity> entities = directory.listSync(recursive: false);
-          
-          for (final entity in entities) {
-            if (entity is File) {
-              final ext = path.extension(entity.path).toLowerCase();
-              if (_imageExtensions.contains(ext) || _videoExtensions.contains(ext)) {
-                statusFiles.add(entity);
-              }
-            }
-          }
-        }
-      } catch (e) {
-        print('Error accessing directory $dir: $e');
-      }
-    }
+    // Run heavy file scanning in isolate
+    final filePaths = await compute(_scanMultipleDirectoriesIsolate, statusDirs);
 
-    // Sort by last modified (newest first)
-    statusFiles.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
-    return statusFiles;
+    // Convert paths to File objects (lightweight operation)
+    return filePaths.map((p) => File(p)).toList();
   }
 
-  static const String _prefsKeyLastSelectedDir = 'last_selected_status_dir';
-  static String? _lastSelectedDirectory;
-
-  static Future<void> _saveSelectedDirectory(String? path) async {
+  static Future<void> _saveSelectedDirectory(String? dirPath) async {
     final prefs = await SharedPreferences.getInstance();
-    if (path != null) {
-      await prefs.setString(_prefsKeyLastSelectedDir, path);
+    if (dirPath != null) {
+      await prefs.setString(_prefsKeyLastSelectedDir, dirPath);
     } else {
       await prefs.remove(_prefsKeyLastSelectedDir);
     }
@@ -135,158 +206,78 @@ class WhatsAppStatusUtils {
     return prefs.getString(_prefsKeyLastSelectedDir);
   }
 
-  /// Get status files using Storage Access Framework (SAF)
+  /// Get status files using Storage Access Framework (SAF) - OPTIMIZED
   static Future<List<File>> getStatusFilesViaSAF() async {
     try {
-      // Check for saved directory first
       _lastSelectedDirectory = await _getSavedDirectory();
-      
-      // If we have a valid saved directory, try to use it
-      if (_lastSelectedDirectory != null && await Directory(_lastSelectedDirectory!).exists()) {
-        try {
-          final files = await _getFilesFromDirectory(Directory(_lastSelectedDirectory!));
-          if (files.isNotEmpty) {
-            return files;
-          }
-        } catch (e) {
-          print('Error reading saved directory: $e');
+
+      // Try saved directory first
+      if (_lastSelectedDirectory != null &&
+          await Directory(_lastSelectedDirectory!).exists()) {
+        final filePaths = await compute(_scanDirectoryIsolate, _lastSelectedDirectory!);
+        if (filePaths.isNotEmpty) {
+          return filePaths.map((p) => File(p)).toList();
         }
       }
-      
-      // If no saved directory or it's invalid, show directory picker
-      final String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
-      
-      if (selectedDirectory == null) {
-        // If user cancels, return empty list
-        return [];
-      }
 
-      // Save the selected directory for future use
+      // Show directory picker
+      final String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      if (selectedDirectory == null) return [];
+
       _lastSelectedDirectory = selectedDirectory;
       await _saveSelectedDirectory(selectedDirectory);
 
-      // First try to read directly from the selected directory
-      try {
-        final files = await _getFilesFromDirectory(Directory(selectedDirectory));
-        if (files.isNotEmpty) {
-          return files;
-        }
-      } catch (e) {
-        print('Error reading selected directory: $e');
+      // Try direct scan
+      var filePaths = await compute(_scanDirectoryIsolate, selectedDirectory);
+      if (filePaths.isNotEmpty) {
+        return filePaths.map((p) => File(p)).toList();
       }
 
-      // If no files found, try common WhatsApp status subdirectories
-      final statusDirs = await _getWhatsAppStatusDirs();
-      
-      // Check if the selected directory is a parent of a WhatsApp status directory
-      for (final dir in statusDirs) {
-        if (selectedDirectory.contains('WhatsApp') && dir.contains(selectedDirectory)) {
-          final statusDir = Directory(dir);
-          if (await statusDir.exists()) {
-            _lastSelectedDirectory = dir;
-            await _saveSelectedDirectory(dir);
-            return _getFilesFromDirectory(statusDir);
-          }
-        }
-      }
-      
-      // If still no files, try common status subdirectories
+      // Try common subdirectories
       final possibleSubdirs = [
         'Media/.Statuses',
         'WhatsApp/Media/.Statuses',
         'Android/media/com.whatsapp/WhatsApp/Media/.Statuses',
-        'com.whatsapp/WhatsApp/Media/.Statuses'
       ];
-      
+
       for (final subdir in possibleSubdirs) {
-        final statusDir = Directory('$selectedDirectory/$subdir');
-        if (await statusDir.exists()) {
-          _lastSelectedDirectory = statusDir.path;
-          await _saveSelectedDirectory(statusDir.path);
-          return _getFilesFromDirectory(statusDir);
-        }
-      }
-      
-      // As a last resort, try to find any media files in the selected directory recursively
-      try {
-        final dir = Directory(selectedDirectory);
-        final files = <File>[];
-        await for (var entity in dir.list(recursive: true)) {
-          if (entity is File) {
-            final ext = path.extension(entity.path).toLowerCase();
-            if (_imageExtensions.contains(ext) || _videoExtensions.contains(ext)) {
-              files.add(entity);
-            }
+        final statusDirPath = '$selectedDirectory/$subdir';
+        if (await Directory(statusDirPath).exists()) {
+          _lastSelectedDirectory = statusDirPath;
+          await _saveSelectedDirectory(statusDirPath);
+          filePaths = await compute(_scanDirectoryIsolate, statusDirPath);
+          if (filePaths.isNotEmpty) {
+            return filePaths.map((p) => File(p)).toList();
           }
         }
-        if (files.isNotEmpty) {
-          files.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
-          return files;
-        }
-      } catch (e) {
-        print('Error searching for media files: $e');
       }
-      
-      // If all else fails, return an empty list
-      return [];
+
+      // Recursive scan as last resort
+      filePaths = await compute(_scanRecursiveIsolate, selectedDirectory);
+      return filePaths.map((p) => File(p)).toList();
     } catch (e) {
-      print('Error in getStatusFilesViaSAF: $e');
       return [];
     }
   }
 
-  static Future<List<File>> _getFilesFromDirectory(Directory directory) async {
-    final List<File> statusFiles = [];
-    
-    try {
-      final entities = directory.listSync(recursive: false);
-      
-      for (final entity in entities) {
-        if (entity is File) {
-          final ext = path.extension(entity.path).toLowerCase();
-          if (_imageExtensions.contains(ext) || _videoExtensions.contains(ext)) {
-            statusFiles.add(entity);
-          }
-        }
-      }
-      
-      // Sort by last modified (newest first)
-      statusFiles.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
-    } catch (e) {
-      print('Error reading directory ${directory.path}: $e');
-    }
-    
-    return statusFiles;
-  }
-
-  /// Get status files using the best available method
+  /// Get status files using the best available method - OPTIMIZED
   static Future<List<File>> getStatusFiles({bool forceSAF = false}) async {
-    // First check if we have a saved directory
+    // Check saved directory first
     final savedDir = await _getSavedDirectory();
     if (savedDir != null && await Directory(savedDir).exists()) {
-      try {
-        final files = await _getFilesFromDirectory(Directory(savedDir));
-        if (files.isNotEmpty) {
-          return files;
-        }
-      } catch (e) {
-        print('Error reading saved directory: $e');
+      final filePaths = await compute(_scanDirectoryIsolate, savedDir);
+      if (filePaths.isNotEmpty) {
+        return filePaths.map((p) => File(p)).toList();
       }
     }
 
-    // If no saved directory or it failed, try direct access
+    // Try direct access
     if (!forceSAF && await hasStoragePermission()) {
-      try {
-        final files = await getStatusFilesDirect();
-        if (files.isNotEmpty) {
-          return files;
-        }
-      } catch (e) {
-        print('Error in direct file access, falling back to SAF: $e');
-      }
+      final files = await getStatusFilesDirect();
+      if (files.isNotEmpty) return files;
     }
-    
-    // Fall back to SAF if other methods fail or are forced
+
+    // Fall back to SAF
     return getStatusFilesViaSAF();
   }
 }

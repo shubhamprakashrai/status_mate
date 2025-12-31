@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__ide__getDiagnostics",
+      "Bash(flutter analyze:*)",
+      "Bash(flutter pub outdated:*)",
+      "Bash(flutter doctor:*)",
+      "Bash(flutter build:*)",
+      "Bash(cat:*)",
+      "Bash(flutter pub get:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nFix critical issues: remove hardcoded credentials and update deprecated APIs\n\n- Remove hardcoded keystore passwords from build.gradle\n- Add key.properties and keystore files to .gitignore\n- Update Share.shareXFiles to SharePlus.instance.share\\(\\)\n- Replace deprecated withOpacity with withValues\\(alpha:\\)\n- Replace deprecated ColorScheme.background with surfaceContainerHighest\n- Add missing path dependency to pubspec.yaml\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(flutter pub:*)",
+      "Bash(dart run:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nv1.2.0: Major UI overhaul and performance optimizations\n\n- Add video thumbnail support with caching\n- Redesign status grid with modern card UI\n- Implement smooth scrolling with Slivers and RepaintBoundary\n- Add animated splash screen with dark/light theme support\n- Update segmented tab bar with gradient indicator\n- Optimize file scanning with isolates \\(compute\\)\n- Fix video preview with proper error handling\n- Remove aggressive auto-refresh timer \\(use pull-to-refresh\\)\n- Update app icons with adaptive icon support\n- Configure native splash screen with WhatsApp green theme\n- Remove hardcoded credentials from build.gradle\n- Fix deprecated API usage \\(Share, withOpacity, ColorScheme\\)\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+    ]
+  }
+}

@@ -3,7 +3,7 @@ display_name: Status Mate
 description: "A new Flutter project."
 publish_to: 'none' 
 
-version: 1.1.0+6
+version: 1.2.0+7
 
 environment:
   sdk: ^3.6.0
@@ -25,6 +25,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   path: ^1.9.0
   video_player: ^2.10.0
+  video_thumbnail: ^0.5.3
   flutter_downloader: ^1.12.0
   share_plus: ^11.0.0
   webview_flutter: ^4.13.0
@@ -54,29 +55,31 @@ flutter:
   assets:
     - assets/
 
-flutter_icons:
-  android: "launcher_icon"
+flutter_launcher_icons:
+  android: true
   ios: true
-  image_path: "assets/icon/icon.png"
+  image_path: "assets/StatusMateIcon.jpeg"
   min_sdk_android: 21
   remove_alpha_ios: true
+  adaptive_icon_background: "#25D366"
+  adaptive_icon_foreground: "assets/StatusMateIcon.jpeg"
   web:
     generate: true
-    image_path: "assets/icon/icon.png"
+    image_path: "assets/StatusMateIcon.jpeg"
   windows:
     generate: true
-    image_path: "assets/icon/icon.png"
-    icon_size: 48 
+    image_path: "assets/StatusMateIcon.jpeg"
   macos:
     generate: true
-    image_path: "assets/icon/icon.png"
+    image_path: "assets/StatusMateIcon.jpeg"
 
 flutter_native_splash:
-  color: "#ffffff"
-  image: "assets/icon/icon.png"
+  color: "#25D366"
+  image: "assets/StatusMateIcon.jpeg"
   android: true
   ios: true
   web: true
   android_12:
-    image: "assets/icon/icon.png"
-    color: "#ffffff"
+    image: "assets/StatusMateIcon.jpeg"
+    color: "#25D366"
+    icon_background_color: "#25D366"
