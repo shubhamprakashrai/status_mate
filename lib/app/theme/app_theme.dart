@@ -16,8 +16,8 @@ class AppTheme {
       primary: primaryColor,
       secondary: accentColor,
       error: errorColor,
-      background: backgroundColor,
       surface: cardColor,
+      surfaceContainerHighest: backgroundColor,
     ),
     scaffoldBackgroundColor: backgroundColor,
     appBarTheme: const AppBarTheme(

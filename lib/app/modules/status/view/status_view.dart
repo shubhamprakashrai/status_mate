@@ -82,8 +82,6 @@ class _StatusViewState extends State<StatusView>
           return !isVideoFile && matchesSearch;
         case status_controller.StatusType.video:
           return isVideoFile && matchesSearch;
-        default:
-          return matchesSearch; // Fallback
       }
     }).toList();
   }
@@ -261,9 +259,11 @@ class _StatusViewState extends State<StatusView>
       final tempFile = await file.copy('${tempDir.path}/$uniqueFileName');
 
       // Share the file using the file provider
-      await Share.shareXFiles( // FIXED: Use shareXFiles (simpler than SharePlus.instance)
-        [XFile(tempFile.path, mimeType: mimeType)],
-        sharePositionOrigin: const Rect.fromLTWH(0, 0, 10, 10), // Minimal rect
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(tempFile.path, mimeType: mimeType)],
+          sharePositionOrigin: const Rect.fromLTWH(0, 0, 10, 10),
+        ),
       );
 
     } catch (e, stackTrace) {

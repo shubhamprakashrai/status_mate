@@ -27,14 +27,7 @@ def keystorePropertiesFile = rootProject.file('key.properties')
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 } else {
-    // Use the keystore in the home directory for release builds
-    def userHome = System.getProperty('user.home')
-    keystoreProperties = [
-        keyAlias: 'statusmate',
-        keyPassword: 'StatusMate@123d',  // Replace with your actual key password
-        storeFile: file("${userHome}/status_mate.jks"),
-        storePassword: 'StatusMate@123d'  // Replace with your actual keystore password
-    ]
+    throw new GradleException("key.properties file not found. Please create it with keystore credentials.")
 }
 
 android {

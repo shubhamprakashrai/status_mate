@@ -92,7 +92,7 @@ class _VideoPreviewPageState extends State<VideoPreviewPage> {
                       right: 0,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        color: Colors.black.withOpacity(0.5),
+                        color: Colors.black.withValues(alpha: 0.5),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [

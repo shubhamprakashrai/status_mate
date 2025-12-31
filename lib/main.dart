@@ -6,18 +6,18 @@ import 'app/routes/app_pages.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize Flutter Downloader
   await FlutterDownloader.initialize(
     debug: true, // optional: set false in production
   );
-  
+
   // Initialize LocalStorageService
   await Get.putAsync<LocalStorageService>(
     () async => await LocalStorageService().init(),
     permanent: true,
   );
-  
+
   runApp(const MyApp());
 }
 
@@ -34,5 +34,3 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
-
