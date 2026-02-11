@@ -110,35 +110,17 @@ class StatusController extends GetxController {
   Future<bool> _checkAndRequestPermissions() async {
     try {
       if (Platform.isAndroid) {
-        // For Android 13+ (API 33+)
-        if (await perm.Permission.videos.isRestricted ||
-            await perm.Permission.photos.isRestricted) {
-          permissionError.value = AppStrings.storagePermissionRequired;
-          return false;
+        // For Android 11+ (API 30+), request MANAGE_EXTERNAL_STORAGE
+        if (await perm.Permission.manageExternalStorage.isDenied) {
+          final status = await perm.Permission.manageExternalStorage.request();
+          if (status.isGranted) return true;
         }
 
-        // For Android 13+ (API 33+)
-        if (await perm.Permission.videos.isPermanentlyDenied ||
-            await perm.Permission.photos.isPermanentlyDenied) {
-          permissionError.value = AppStrings.storagePermissionRequired;
-          return false;
+        if (await perm.Permission.manageExternalStorage.isGranted) {
+          return true;
         }
 
-        // For Android 13+ (API 33+)
-        if (!await perm.Permission.videos.isGranted || !await perm.Permission.photos.isGranted) {
-          final statuses = await [
-            perm.Permission.photos,
-            perm.Permission.videos,
-          ].request();
-
-          if (statuses[perm.Permission.photos] != perm.PermissionStatus.granted ||
-              statuses[perm.Permission.videos] != perm.PermissionStatus.granted) {
-            permissionError.value = AppStrings.storagePermissionRequired;
-            return false;
-          }
-        }
-
-        // For Android 11-12 (API 30-32)
+        // For Android 10 and below
         if (!await perm.Permission.storage.isGranted) {
           final status = await perm.Permission.storage.request();
           if (status != perm.PermissionStatus.granted) {

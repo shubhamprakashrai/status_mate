@@ -39,11 +39,6 @@ class WhatsAppStatusUtils {
       return true;
     }
 
-    if (await perm.Permission.photos.isGranted && 
-        await perm.Permission.videos.isGranted) {
-      return true;
-    }
-
     return false;
   }
 
@@ -53,36 +48,16 @@ class WhatsAppStatusUtils {
       return true;
     }
 
-    // For Android 13+ (API 33+)
-    if (await perm.Permission.videos.isRestricted ||
-        await perm.Permission.photos.isRestricted) {
-      return false;
-    }
-
-    // Request appropriate permissions based on Android version
+    // For Android 11+ (API 30+), request MANAGE_EXTERNAL_STORAGE
     if (await perm.Permission.manageExternalStorage.isDenied) {
       final status = await perm.Permission.manageExternalStorage.request();
       if (status.isGranted) return true;
     }
 
-    // For Android 11-12 (API 30-32)
+    // For Android 10 and below
     if (await perm.Permission.storage.isDenied) {
       final status = await perm.Permission.storage.request();
       if (status.isGranted) return true;
-    }
-
-    // For Android 13+ (API 33+)
-    if (await perm.Permission.photos.isDenied || 
-        await perm.Permission.videos.isDenied) {
-      final statuses = await [
-        perm.Permission.photos,
-        perm.Permission.videos,
-      ].request();
-      
-      if (statuses[perm.Permission.photos]!.isGranted &&
-          statuses[perm.Permission.videos]!.isGranted) {
-        return true;
-      }
     }
 
     return false;
